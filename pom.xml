@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.github.cabutchei</groupId>
+  <artifactId>parent</artifactId>
+  <version>0.1.0.alpha</version>
+  <packaging>pom</packaging>
+
+  <name>JDT LS JRE Container</name>
+
+  <properties>
+    <tycho.version>4.0.4</tycho.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <modules>
+    <module>targetplatform</module>
+    <module>com.github.cabutchei.jdtls.jrecontainer</module>
+  </modules>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.eclipse.tycho</groupId>
+        <artifactId>tycho-maven-plugin</artifactId>
+        <version>${tycho.version}</version>
+        <extensions>true</extensions>
+      </plugin>
+      <plugin>
+        <groupId>org.eclipse.tycho</groupId>
+        <artifactId>target-platform-configuration</artifactId>
+        <version>${tycho.version}</version>
+        <configuration>
+          <environments>
+            <environment>
+              <os>macosx</os>
+              <ws>cocoa</ws>
+              <arch>x86_64</arch>
+            </environment>
+						<environment>
+							<os>win32</os>
+							<ws>win32</ws>
+							<arch>x86_64</arch>
+						</environment> 
+          </environments>
+          <target>
+            <artifact>
+              <groupId>com.github.cabutchei</groupId>
+              <artifactId>targetplatform</artifactId>
+              <version>0.1.0.alpha</version>
+            </artifact>
+          </target>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

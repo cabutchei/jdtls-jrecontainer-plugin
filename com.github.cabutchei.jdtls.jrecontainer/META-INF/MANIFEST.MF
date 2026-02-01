@@ -1,0 +1,13 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Plugin
+Bundle-SymbolicName: com.github.cabutchei.jdtls.jrecontainer;singleton:=true
+Bundle-Version: 0.1.0.alpha
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+Bundle-Vendor: cabutchei
+Require-Bundle: org.eclipse.core.runtime,
+ org.eclipse.core.resources,
+ org.eclipse.jdt.core,
+ org.eclipse.jdt.launching,
+ org.eclipse.jdt.ls.core
+Bundle-ActivationPolicy: lazy

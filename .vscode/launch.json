@@ -1,0 +1,13 @@
+{
+  "version": "2.0.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Attach to jdt.ls",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": "1044",
+      "projectName": "com.github.cabutchei.jdtls.jrecontainer"
+    }
+  ]
+}

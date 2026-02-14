@@ -5,8 +5,13 @@
       <delegateCommandHandler
             class="com.github.cabutchei.jdtls.jrecontainer.RspVmInstallCommandHandler">
          <command id="com.github.cabutchei.jdtls.jrecontainer.createVmInstall"/>
+         <command id="com.github.cabutchei.rsp.jdtls.createVmInstall"/>
          <command id="com.github.cabutchei.jdtls.jrecontainer.setJreContainer"/>
+         <command id="com.github.cabutchei.rsp.jdtls.setJreContainer"/>
+         <command id="com.github.cabutchei.jdtls.jrecontainer.setClasspathContainer"/>
+         <command id="com.github.cabutchei.rsp.jdtls.setClasspathContainer"/>
          <command id="com.github.cabutchei.jdtls.jrecontainer.removeVmInstall"/>
+         <command id="com.github.cabutchei.rsp.jdtls.removeVmInstall"/>
       </delegateCommandHandler>
    </extension>
 </plugin>

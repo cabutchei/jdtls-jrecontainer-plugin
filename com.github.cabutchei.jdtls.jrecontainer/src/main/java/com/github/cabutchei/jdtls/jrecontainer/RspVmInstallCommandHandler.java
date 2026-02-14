@@ -19,6 +19,9 @@ import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Path;
+import org.eclipse.jdt.core.IAccessRule;
+import org.eclipse.jdt.core.IClasspathAttribute;
+import org.eclipse.jdt.core.IClasspathContainer;
 import org.eclipse.jdt.core.IClasspathEntry;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.JavaCore;
@@ -37,19 +40,43 @@ public class RspVmInstallCommandHandler implements IDelegateCommandHandler {
 
 	public static final String COMMAND_ID = "com.github.cabutchei.jdtls.jrecontainer.createVmInstall";
 	public static final String COMMAND_ID_SET_JRE_CONTAINER = "com.github.cabutchei.jdtls.jrecontainer.setJreContainer";
+	public static final String COMMAND_ID_SET_CLASSPATH_CONTAINER = "com.github.cabutchei.jdtls.jrecontainer.setClasspathContainer";
 	public static final String COMMAND_ID_REMOVE_VM = "com.github.cabutchei.jdtls.jrecontainer.removeVmInstall";
+	public static final String COMMAND_ID_ALIAS_CREATE_VM = "com.github.cabutchei.rsp.jdtls.createVmInstall";
+	public static final String COMMAND_ID_ALIAS_SET_JRE_CONTAINER = "com.github.cabutchei.rsp.jdtls.setJreContainer";
+	public static final String COMMAND_ID_ALIAS_SET_CLASSPATH_CONTAINER = "com.github.cabutchei.rsp.jdtls.setClasspathContainer";
+	public static final String COMMAND_ID_ALIAS_REMOVE_VM = "com.github.cabutchei.rsp.jdtls.removeVmInstall";
 	private static final String DEBUG_UI_VM_TYPE_ID = "org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType";
 	private static final String CORE_VM_TYPE_ID = StandardVMType.ID_STANDARD_VM_TYPE;
 
+	private static boolean isCreateVmCommand(String commandId) {
+		return COMMAND_ID.equals(commandId) || COMMAND_ID_ALIAS_CREATE_VM.equals(commandId);
+	}
+
+	private static boolean isSetJreContainerCommand(String commandId) {
+		return COMMAND_ID_SET_JRE_CONTAINER.equals(commandId) || COMMAND_ID_ALIAS_SET_JRE_CONTAINER.equals(commandId);
+	}
+
+	private static boolean isSetClasspathContainerCommand(String commandId) {
+		return COMMAND_ID_SET_CLASSPATH_CONTAINER.equals(commandId) || COMMAND_ID_ALIAS_SET_CLASSPATH_CONTAINER.equals(commandId);
+	}
+
+	private static boolean isRemoveVmCommand(String commandId) {
+		return COMMAND_ID_REMOVE_VM.equals(commandId) || COMMAND_ID_ALIAS_REMOVE_VM.equals(commandId);
+	}
+
 	@Override
 	public Object executeCommand(String commandId, List<Object> arguments, IProgressMonitor monitor) throws Exception {
-		if (COMMAND_ID_SET_JRE_CONTAINER.equals(commandId)) {
+		if (isSetJreContainerCommand(commandId)) {
 			return handleSetJreContainer(arguments, monitor);
 		}
-		if (COMMAND_ID_REMOVE_VM.equals(commandId)) {
+		if (isSetClasspathContainerCommand(commandId)) {
+			return handleSetClasspathContainer(arguments, monitor);
+		}
+		if (isRemoveVmCommand(commandId)) {
 			return handleRemoveVmInstall(arguments, monitor);
 		}
-		if (!COMMAND_ID.equals(commandId)) {
+		if (!isCreateVmCommand(commandId)) {
 			return result(false, "Unsupported command: " + commandId, null);
 		}
 
@@ -212,20 +239,83 @@ public class RspVmInstallCommandHandler implements IDelegateCommandHandler {
 		return result(true, "JRE container updated.", payload);
 	}
 
+	private Object handleSetClasspathContainer(List<Object> arguments, IProgressMonitor monitor) throws Exception {
+		ClasspathContainerRequest request = ClasspathContainerRequest.from(arguments);
+		if (request == null) {
+			return result(false, "Missing parameters for setClasspathContainer.", null);
+		}
+		IProject project = resolveProject(request.projectName, request.projectUri, request.projectPath);
+		if (project == null || !project.exists()) {
+			return result(false, "Project not found.", null);
+		}
+		IJavaProject javaProject = JavaCore.create(project);
+		if (javaProject == null || !javaProject.exists()) {
+			return result(false, "Project is not a Java project.", null);
+		}
+		IPath containerPath = resolveContainerPath(request.containerPath);
+		if (containerPath == null) {
+			return result(false, "Unable to resolve classpath container path from request.", null);
+		}
+		List<IClasspathEntry> resolvedEntries = new ArrayList<>();
+		if (request.entries != null) {
+			for (ClasspathContainerEntryRequest entry : request.entries) {
+				IClasspathEntry cpEntry = toClasspathEntry(entry);
+				if (cpEntry != null) {
+					resolvedEntries.add(cpEntry);
+				}
+			}
+		}
+
+		IClasspathEntry containerEntry = JavaCore.newContainerEntry(containerPath);
+		IClasspathEntry[] raw = javaProject.getRawClasspath();
+		List<IClasspathEntry> updated = new ArrayList<>();
+		boolean found = false;
+		for (IClasspathEntry entry : raw) {
+			if (entry != null && entry.getEntryKind() == IClasspathEntry.CPE_CONTAINER
+					&& containerPath.equals(entry.getPath())) {
+				found = true;
+				updated.add(entry);
+			} else {
+				updated.add(entry);
+			}
+		}
+		if (!found) {
+			updated.add(containerEntry);
+		}
+		javaProject.setRawClasspath(updated.toArray(new IClasspathEntry[0]), monitor);
+
+		IClasspathContainer container = new SimpleClasspathContainer(
+				containerPath,
+				request.description,
+				resolvedEntries.toArray(new IClasspathEntry[0]));
+		JavaCore.setClasspathContainer(containerPath, new IJavaProject[] { javaProject },
+				new IClasspathContainer[] { container }, monitor);
+
+		Map<String, Object> payload = new HashMap<>();
+		payload.put("project", project.getName());
+		payload.put("containerPath", containerPath.toString());
+		payload.put("entries", Integer.valueOf(resolvedEntries.size()));
+		return result(true, "Classpath container updated.", payload);
+	}
+
 	private static IProject resolveProject(JreContainerRequest request) {
+		return resolveProject(request.projectName, request.projectUri, request.projectPath);
+	}
+
+	private static IProject resolveProject(String projectName, String projectUri, String projectPath) {
 		IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
-		if (request.projectName != null && !request.projectName.isBlank()) {
-			IProject project = root.getProject(request.projectName);
+		if (projectName != null && !projectName.isBlank()) {
+			IProject project = root.getProject(projectName);
 			return project.exists() ? project : null;
 		}
-		if (request.projectUri != null && !request.projectUri.isBlank()) {
-			IProject fromUri = findProjectByUri(root, request.projectUri);
+		if (projectUri != null && !projectUri.isBlank()) {
+			IProject fromUri = findProjectByUri(root, projectUri);
 			if (fromUri != null) {
 				return fromUri;
 			}
 		}
-		if (request.projectPath != null && !request.projectPath.isBlank()) {
-			IProject fromPath = findProjectByUri(root, request.projectPath);
+		if (projectPath != null && !projectPath.isBlank()) {
+			IProject fromPath = findProjectByUri(root, projectPath);
 			if (fromPath != null) {
 				return fromPath;
 			}
@@ -235,7 +325,12 @@ public class RspVmInstallCommandHandler implements IDelegateCommandHandler {
 
 	private static IProject findProjectByUri(IWorkspaceRoot root, String value) {
 		try {
-			URI uri = value.contains("://") ? URI.create(value) : new File(value).toURI();
+			URI uri;
+			if (value.startsWith("file:") || value.contains("://")) {
+				uri = URI.create(value);
+			} else {
+				uri = new File(value).toURI();
+			}
 			IContainer[] containers = root.findContainersForLocationURI(uri);
 			for (IContainer container : containers) {
 				IProject project = container.getProject();
@@ -268,6 +363,13 @@ public class RspVmInstallCommandHandler implements IDelegateCommandHandler {
 		return null;
 	}
 
+	private static IPath resolveContainerPath(String containerPath) {
+		if (containerPath == null || containerPath.isBlank()) {
+			return null;
+		}
+		return new Path(containerPath);
+	}
+
 	private static IPath normalizeContainerPath(IPath path) {
 		if (path == null || path.segmentCount() < 2) {
 			return path;
@@ -280,6 +382,40 @@ public class RspVmInstallCommandHandler implements IDelegateCommandHandler {
 			return new Path(JavaRuntime.JRE_CONTAINER).append(CORE_VM_TYPE_ID).append(remainder);
 		}
 		return path;
+	}
+
+	private static IClasspathEntry toClasspathEntry(ClasspathContainerEntryRequest entry) {
+		if (entry == null || entry.path == null || entry.path.isBlank()) {
+			return null;
+		}
+		IPath path = new Path(entry.path);
+		IPath sourcePath = entry.sourcePath != null && !entry.sourcePath.isBlank() ? new Path(entry.sourcePath) : null;
+		IPath sourceRoot = entry.sourceRootPath != null && !entry.sourceRootPath.isBlank() ? new Path(entry.sourceRootPath) : null;
+		IClasspathAttribute[] attributes = toClasspathAttributes(entry.javadocLocation);
+		IAccessRule[] accessRules = new IAccessRule[0];
+		switch (entry.entryKind) {
+			case IClasspathEntry.CPE_LIBRARY:
+				return JavaCore.newLibraryEntry(path, sourcePath, sourceRoot, accessRules, attributes, entry.exported);
+			case IClasspathEntry.CPE_PROJECT:
+				return JavaCore.newProjectEntry(path, accessRules, false, attributes, entry.exported);
+			case IClasspathEntry.CPE_CONTAINER:
+				return JavaCore.newContainerEntry(path, accessRules, attributes, entry.exported);
+			case IClasspathEntry.CPE_VARIABLE:
+				return JavaCore.newVariableEntry(path, sourcePath, sourceRoot, accessRules, attributes, entry.exported);
+			case IClasspathEntry.CPE_SOURCE:
+				return JavaCore.newSourceEntry(path, new IPath[0], new IPath[0], null, attributes);
+			default:
+				return null;
+		}
+	}
+
+	private static IClasspathAttribute[] toClasspathAttributes(String javadocLocation) {
+		if (javadocLocation == null || javadocLocation.isBlank()) {
+			return new IClasspathAttribute[0];
+		}
+		return new IClasspathAttribute[] {
+				JavaCore.newClasspathAttribute(IClasspathAttribute.JAVADOC_LOCATION_ATTRIBUTE_NAME, javadocLocation)
+		};
 	}
 
 	private static IVMInstall resolveVmInstall(JreContainerRequest request) {
@@ -603,6 +739,112 @@ public class RspVmInstallCommandHandler implements IDelegateCommandHandler {
 		}
 	}
 
+	private static final class ClasspathContainerRequest {
+		private final String projectName;
+		private final String projectUri;
+		private final String projectPath;
+		private final String containerPath;
+		private final String description;
+		private final List<ClasspathContainerEntryRequest> entries;
+
+		private ClasspathContainerRequest(String projectName, String projectUri, String projectPath, String containerPath,
+				String description, List<ClasspathContainerEntryRequest> entries) {
+			this.projectName = projectName;
+			this.projectUri = projectUri;
+			this.projectPath = projectPath;
+			this.containerPath = containerPath;
+			this.description = description;
+			this.entries = entries;
+		}
+
+		static ClasspathContainerRequest from(List<Object> arguments) {
+			if (arguments == null || arguments.isEmpty()) {
+				return null;
+			}
+			Object first = arguments.get(0);
+			if (first instanceof Map<?, ?>) {
+				return fromMap((Map<?, ?>) first);
+			}
+			return null;
+		}
+
+		private static ClasspathContainerRequest fromMap(Map<?, ?> raw) {
+			String projectName = Request.firstString(raw, "projectName", "name");
+			String projectUri = Request.firstString(raw, "projectUri", "projectURI", "uri");
+			String projectPath = Request.firstString(raw, "projectPath", "path");
+			String containerPath = Request.firstString(raw, "containerPath");
+			String description = Request.firstString(raw, "description");
+			List<ClasspathContainerEntryRequest> entries = ClasspathContainerEntryRequest.from(raw.get("entries"));
+			return new ClasspathContainerRequest(projectName, projectUri, projectPath, containerPath, description, entries);
+		}
+	}
+
+	private static final class ClasspathContainerEntryRequest {
+		private final int entryKind;
+		private final String path;
+		private final String sourcePath;
+		private final String sourceRootPath;
+		private final String javadocLocation;
+		private final boolean exported;
+
+		private ClasspathContainerEntryRequest(int entryKind, String path, String sourcePath, String sourceRootPath,
+				String javadocLocation, boolean exported) {
+			this.entryKind = entryKind;
+			this.path = path;
+			this.sourcePath = sourcePath;
+			this.sourceRootPath = sourceRootPath;
+			this.javadocLocation = javadocLocation;
+			this.exported = exported;
+		}
+
+		static List<ClasspathContainerEntryRequest> from(Object raw) {
+			if (!(raw instanceof List<?>)) {
+				return Collections.emptyList();
+			}
+			List<?> list = (List<?>) raw;
+			List<ClasspathContainerEntryRequest> entries = new ArrayList<>();
+			for (Object item : list) {
+				if (item instanceof Map<?, ?>) {
+					ClasspathContainerEntryRequest entry = fromMap((Map<?, ?>) item);
+					if (entry != null) {
+						entries.add(entry);
+					}
+				}
+			}
+			return entries;
+		}
+
+		private static ClasspathContainerEntryRequest fromMap(Map<?, ?> raw) {
+			int entryKind = firstInt(raw, "entryKind", "kind");
+			String path = Request.firstString(raw, "path");
+			if (path == null || path.isBlank()) {
+				return null;
+			}
+			String sourcePath = Request.firstString(raw, "sourcePath", "source");
+			String sourceRootPath = Request.firstString(raw, "sourceRootPath", "sourceRoot");
+			String javadocLocation = Request.firstString(raw, "javadocLocation", "javadoc", "javadocUrl");
+			boolean exported = Request.firstBoolean(raw, "exported");
+			return new ClasspathContainerEntryRequest(entryKind, path, sourcePath, sourceRootPath, javadocLocation, exported);
+		}
+
+		private static int firstInt(Map<?, ?> raw, String... keys) {
+			for (String key : keys) {
+				Object value = raw.get(key);
+				if (value instanceof Number) {
+					return ((Number) value).intValue();
+				}
+				if (value instanceof String) {
+					try {
+						return Integer.parseInt((String) value);
+					} catch (NumberFormatException e) {
+						return 0;
+					}
+				}
+			}
+			return 0;
+		}
+	}
+
 	private static final class JreContainerRequest {
 		private final String projectName;
 		private final String projectUri;
@@ -689,6 +931,38 @@ public class RspVmInstallCommandHandler implements IDelegateCommandHandler {
 			String javaHome = Request.firstString(raw, "javaHome", "path");
 			boolean removeContainers = Request.firstBoolean(raw, "removeContainers", "removeJreContainers", "removeContainersInProjects");
 			return new RemoveVmRequest(vmId, vmName, javaHome, removeContainers);
+		}
+	}
+
+	private static final class SimpleClasspathContainer implements IClasspathContainer {
+		private final IPath path;
+		private final String description;
+		private final IClasspathEntry[] entries;
+
+		private SimpleClasspathContainer(IPath path, String description, IClasspathEntry[] entries) {
+			this.path = path;
+			this.description = description == null || description.isBlank() ? path.toString() : description;
+			this.entries = entries == null ? new IClasspathEntry[0] : entries;
+		}
+
+		@Override
+		public IClasspathEntry[] getClasspathEntries() {
+			return entries;
+		}
+
+		@Override
+		public String getDescription() {
+			return description;
+		}
+
+		@Override
+		public int getKind() {
+			return IClasspathContainer.K_APPLICATION;
+		}
+
+		@Override
+		public IPath getPath() {
+			return path;
 		}
 	}
 }

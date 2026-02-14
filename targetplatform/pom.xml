@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>com.github.cabutchei</groupId>
+    <groupId>com.github.cabutchei.jdtls</groupId>
     <artifactId>parent</artifactId>
     <version>0.1.0.alpha</version>
   </parent>

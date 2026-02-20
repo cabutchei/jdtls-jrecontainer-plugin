@@ -265,24 +265,39 @@ public class RspVmInstallCommandHandler implements IDelegateCommandHandler {
 				}
 			}
 		}
+		if (resolvedEntries.isEmpty()) {
+			Map<String, Object> payload = new HashMap<>();
+			payload.put("project", project.getName());
+			payload.put("containerPath", containerPath.toString());
+			payload.put("entries", Integer.valueOf(0));
+			payload.put("skipped", Boolean.TRUE);
+			return result(true, "Classpath container update skipped: container has no entries.", payload);
+		}
 
-		IClasspathEntry containerEntry = JavaCore.newContainerEntry(containerPath);
 		IClasspathEntry[] raw = javaProject.getRawClasspath();
-		List<IClasspathEntry> updated = new ArrayList<>();
-		boolean found = false;
+		boolean hasContainerEntry = false;
 		for (IClasspathEntry entry : raw) {
-			if (entry != null && entry.getEntryKind() == IClasspathEntry.CPE_CONTAINER
-					&& containerPath.equals(entry.getPath())) {
-				found = true;
-				updated.add(entry);
-			} else {
-				updated.add(entry);
+			if (entry != null && entry.getEntryKind() == IClasspathEntry.CPE_CONTAINER && containerPath.equals(entry.getPath())) {
+				hasContainerEntry = true;
+				break;
 			}
 		}
-		if (!found) {
-			updated.add(containerEntry);
+		IClasspathContainer existingContainer = JavaCore.getClasspathContainer(containerPath, javaProject);
+		if (hasContainerEntry && existingContainer != null && existingContainer.getClasspathEntries() != null
+				&& existingContainer.getClasspathEntries().length > 0) {
+			Map<String, Object> payload = new HashMap<>();
+			payload.put("project", project.getName());
+			payload.put("containerPath", containerPath.toString());
+			payload.put("entries", Integer.valueOf(existingContainer.getClasspathEntries().length));
+			payload.put("skipped", Boolean.TRUE);
+			return result(true, "Classpath container update skipped: container already exists and has entries.", payload);
 		}
-		javaProject.setRawClasspath(updated.toArray(new IClasspathEntry[0]), monitor);
+		if (!hasContainerEntry) {
+			List<IClasspathEntry> updated = new ArrayList<>(raw.length + 1);
+			Collections.addAll(updated, raw);
+			updated.add(JavaCore.newContainerEntry(containerPath));
+			javaProject.setRawClasspath(updated.toArray(new IClasspathEntry[0]), monitor);
+		}
 
 		IClasspathContainer container = new SimpleClasspathContainer(
 				containerPath,

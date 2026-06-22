@@ -3,7 +3,7 @@ Bundle-ManifestVersion: 2
 Bundle-Name: Plugin
 Bundle-SymbolicName: com.github.cabutchei.jdtls.jrecontainer;singleton:=true
 Automatic-Module-Name: com.github.cabutchei.jdtls.jrecontainer
-Bundle-Version: 0.1.0.alpha
+Bundle-Version: 0.2.0.alpha
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Bundle-Vendor: cabutchei
 Require-Bundle: org.eclipse.core.runtime,

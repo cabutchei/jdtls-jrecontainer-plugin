@@ -282,16 +282,6 @@ public class RspVmInstallCommandHandler implements IDelegateCommandHandler {
 				break;
 			}
 		}
-		IClasspathContainer existingContainer = JavaCore.getClasspathContainer(containerPath, javaProject);
-		if (hasContainerEntry && existingContainer != null && existingContainer.getClasspathEntries() != null
-				&& existingContainer.getClasspathEntries().length > 0) {
-			Map<String, Object> payload = new HashMap<>();
-			payload.put("project", project.getName());
-			payload.put("containerPath", containerPath.toString());
-			payload.put("entries", Integer.valueOf(existingContainer.getClasspathEntries().length));
-			payload.put("skipped", Boolean.TRUE);
-			return result(true, "Classpath container update skipped: container already exists and has entries.", payload);
-		}
 		if (!hasContainerEntry) {
 			List<IClasspathEntry> updated = new ArrayList<>(raw.length + 1);
 			Collections.addAll(updated, raw);
